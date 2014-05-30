@@ -1,3 +1,4 @@
+from twisted.enterprise import adbapi
 from twisted.internet import protocol, reactor
 class Echo(protocol.Protocol):
 	def connectionMade(self):
