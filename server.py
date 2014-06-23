@@ -1,32 +1,37 @@
-from twisted.enterprise import adbapi
+﻿from twisted.enterprise import adbapi
 from twisted.internet import protocol, reactor
 import json
 from hashlib import sha256
 from hmac import HMAC
 from twisted.protocols.basic import LineReceiver
 import os
+import base64
 
 def encrypt_password(password, salt=None):
-    """Hash password on the fly."""
-    if salt is None:
-        salt = os.urandom(8) # 64 bits.
+	"""Hash password on the fly."""
 
-    assert 8 == len(salt)
-    assert isinstance(salt, str)
+	if salt is None:
+		salt = os.urandom(8) # 64 bits.
+	
+	assert 8 == len(salt)
+	
+	assert isinstance(salt, str)
+	
+	if isinstance(password, unicode):
+		password = password.encode('UTF-8')
 
-    if isinstance(password, unicode):
-        password = password.encode('UTF-8')
+	assert isinstance(password, str)
 
-    assert isinstance(password, str)
+	result = password
+	for i in xrange(10):
+		result = HMAC(result, salt, sha256).digest()
+	
+	return base64.encodestring(salt + result)
+	
 
-    result = password
-    for i in xrange(10):
-        result = HMAC(result, salt, sha256).digest()
-
-    return salt + result
-
-def validate_password(hashed, input_password):
-    return hashed == encrypt_password(input_password, salt=hashed[:8])
+def validate_password(input_password,hashed):
+	origin = base64.decodestring(hashed)
+	return hashed == encrypt_password(input_password, salt=origin[:8])
 
 	
 
@@ -76,18 +81,18 @@ class Matrix(LineReceiver):
 		d.addCallback(self.loginCheck,data)
 		
 	def loginOut(self,data):
-		self.factory.dbpoll.runOperation("UPDATE endpointOrDevice set status ='OffLine' Where id = %s",(self.id,))
+		self.factory.dbpool.runOperation("UPDATE endpointOrDevice set status ='OffLine' Where id = %s",(self.id,))
 		self.factory.devicesOnLine.pop(self.id,"")
 
 	def acceptNewFriend(self,data):	
-		self.factory.dbpoll.runOperation("INSERT INTO relationship (relating_endpoint_id, related_endpoint_id) VALUES(%s, %s)",(data['relating_id'],data['related_id']))
+		self.factory.dbpool.runOperation("INSERT INTO relationship (relating_endpoint_id, related_endpoint_id) VALUES(%s, %s)",(data['relating_id'],data['related_id']))
 
 	def refuseNewFriend(self,data):
-#		self.factory.dbpoll.runOperation("INSERT INTO relationship (relating_endpoint_id, related_endpoint_id) VALUES(%s, %s)",(data['relating_id'],data['related_id']))
+#		self.factory.dbpool.runOperation("INSERT INTO relationship (relating_endpoint_id, related_endpoint_id) VALUES(%s, %s)",(data['relating_id'],data['related_id']))
 		pass
 		
 	def removeFriend(self,data):
-		self.factory.dbpoll.runOperation("DELETE FROM relationship WHERE relating_endpoint_id=%s,related_endpoint_id=%s",(self.id,data['targetId']))
+		self.factory.dbpool.runOperation("DELETE FROM relationship WHERE relating_endpoint_id=%s,related_endpoint_id=%s",(self.id,data['targetId']))
 		
 	def dataToPeer(self,data):
 		self.factory.devicesOnLine[data["targetid"]].transport.write(data)
@@ -100,11 +105,11 @@ class Matrix(LineReceiver):
 	def loginCheck(self,selectResult,data):
 		print "Login check" ,selectResult,data#data['password'],selectResult[0][1]
 		if(len(selectResult)>0):
-			if(validate_password(data['password'], selectResult[0][1])):
+			if(validate_password(data['password'],selectResult[0][1])):
 				print 'compare', data['password'], selectResult[0][1]
 				self.id = id
 				self.factory.devicesOnLine[self.id] = self
-				self.factory.dbpoll.runOperation("UPDATE endpointOrDevice set status ='OnLine' Where id = %s",(data['id'],))
+				self.factory.dbpool.runOperation("UPDATE endpointOrDevice set status ='OnLine' Where id = %s",(data['id'],))
 				self.sendLine(json.dumps({"command":"login_status","login_status":"login sucess"}))
 				self.loginErrorCount =0
 				print 'login check ok'
@@ -137,7 +142,7 @@ class MatrixFactory(protocol.Factory):
 	
 	def createUsersTable(self,transaction):
 		transaction.execute("CREATE TABLE IF NOT EXISTS endpointOrDevice(id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\
-		ip_addr INT NOT NULL,device_type enum('PC','ANDROID','IOS','MAC','BROWER','DEVICE','GATEWAY') NOT NULL ,password CHAR(32),\
+		ip_addr INT NOT NULL,device_type enum('PC','ANDROID','IOS','MAC','BROWER','DEVICE','GATEWAY') NOT NULL ,password CHAR(80),\
 		status enum('OnLine','OffLine') NOT NULL, belong_organization VARCHAR(200))")
 		
 		transaction.execute("CREATE TABLE IF NOT EXISTS companyOrOrganization(id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, \
