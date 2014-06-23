@@ -73,7 +73,7 @@ class Matrix(LineReceiver):
 	def loginIn(self,data):
 		print 'Login in check'
 		d = self.factory.dbpool.runQuery("SELECT id,password FROM endpointOrDevice WHERE id = %s",(data["id"],))
-		d.addCallback(self.loginCheck(self,data))
+		d.addCallback(self.loginCheck,data)
 		
 	def loginOut(self,data):
 		self.factory.dbpoll.runOperation("UPDATE endpointOrDevice set status ='OffLine' Where id = %s",(self.id,))
@@ -97,25 +97,29 @@ class Matrix(LineReceiver):
 	def addIntoGroup(self,data):
 		pass
 		
-	def loginCheck(self,data,selectResult):
-		print "Login check" ,data ,data['password'],selectResult[0][1]
+	def loginCheck(self,selectResult,data):
+		print "Login check" ,selectResult,data#data['password'],selectResult[0][1]
 		if(len(selectResult)>0):
 			if(validate_password(data['password'], selectResult[0][1])):
+				print 'compare', data['password'], selectResult[0][1]
 				self.id = id
 				self.factory.devicesOnLine[self.id] = self
 				self.factory.dbpoll.runOperation("UPDATE endpointOrDevice set status ='OnLine' Where id = %s",(data['id'],))
 				self.sendLine(json.dumps({"command":"login_status","login_status":"login sucess"}))
 				self.loginErrorCount =0
+				print 'login check ok'
 			else:
 				self.sendLine(json.dumps({"command":"login_status","login_status":"wrong password or id"}))
 				self.loginErrorCount+=1
 				if(self.loginErrorCount>10):
 					self.transport.loseConnection()
+				print 'login check failed'
 		else:
 			self.sendLine(json.dumps({"command":"login_status","login_status":"wrong password or id"}))
 			self.loginErrorCount+=1
 			if(self.loginErrorCount>10):
 				self.transport.loseConnection()
+			print 'return 0 when query database '
 	
 class MatrixFactory(protocol.Factory):
 	def __init__(self):
