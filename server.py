@@ -95,7 +95,10 @@ class Matrix(LineReceiver):
 		self.factory.dbpool.runOperation("DELETE FROM relationship WHERE relating_endpoint_id=%s,related_endpoint_id=%s",(self.id,data['targetId']))
 		
 	def dataToPeer(self,data):
-		self.factory.devicesOnLine[data["targetid"]].transport.write(data)
+		for a in self.factory.devicesOnLine.keys():
+			print a
+		self.factory.devicesOnLine[data['targetid']].sendLine(json.dumps({"command":"data_to_peer","command_to_device":data['command_to_device']}))
+		print 'send line finish'
 		
 	def keepLive(self,data):
 		pass
@@ -107,7 +110,7 @@ class Matrix(LineReceiver):
 		if(len(selectResult)>0):
 			if(validate_password(data['password'],selectResult[0][1])):
 				print 'compare', data['password'], selectResult[0][1]
-				self.id = id
+				self.id = data['id']
 				self.factory.devicesOnLine[self.id] = self
 				self.factory.dbpool.runOperation("UPDATE endpointOrDevice set status ='OnLine' Where id = %s",(data['id'],))
 				self.sendLine(json.dumps({"command":"login_status","login_status":"login sucess"}))
