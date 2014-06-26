@@ -101,6 +101,7 @@ class Matrix(LineReceiver):
 		print 'send line finish'
 		
 	def keepLive(self,data):
+		print 'keep live tick from ',data['id']
 		pass
 	def addIntoGroup(self,data):
 		pass
